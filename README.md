@@ -18,7 +18,7 @@ npm run build
 - Kazınmış metinler `cleanText` ile temizlenir, HTML olarak render edilmez.
 
 ## Cloudflare
-Workers & Pages → Create application → GitHub repo → Build command: `npm run build`, çıktı: `dist` (`wrangler.jsonc` SPA yönlendirmesini ayarlar).
+Workers & Pages → Create application → GitHub repo → Build komutu boş bırakılabilir, deploy komutu `npx wrangler deploy` (`wrangler.jsonc` build + SPA yönlendirmesini ayarlar).
 
 ## Eksikler
 Barkod, OCR, RAG asistanı, hesaplar, yüksek çözünürlüklü logo (mevcut 143×139 px; ikonlar büyütülmüş).
