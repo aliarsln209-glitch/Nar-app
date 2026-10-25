@@ -4,11 +4,16 @@ import { ICamera, IKeyboard, ISearch, ISpark, ITorch } from '../ui/Icons'
 import { useApp } from '../ui/ctx'
 import { useLocal } from '../lib/storage'
 import { profileLine } from '../ui/ProfileSwitcher'
+import { getProduct } from '../data/catalog'
+import { analyze } from '../engine/analyze'
+import { useECodes } from '../data/useECodes'
+import { Pill } from '../ui/components'
 
 type BD = { detect: (v: HTMLVideoElement) => Promise<{ rawValue: string }[]> }
 
 export default function Scan({ onProfile, onAssistant }: { onProfile: () => void; onAssistant: () => void }) {
-  const { push, profile, online } = useApp()
+  const { push, profile, online, history } = useApp()
+  const ec = useECodes()
   const [camOk, setCamOk] = useLocal<boolean>('nar.camOk', false)
   const vref = useRef<HTMLVideoElement>(null)
   const track = useRef<MediaStreamTrack | null>(null)
@@ -89,54 +94,68 @@ export default function Scan({ onProfile, onAssistant }: { onProfile: () => void
   const hint = !live ? '' : elapsed >= 8 ? 'Hâlâ okunmadı: numarayı elle yazabilir ya da etiketi fotoğraflayabilirsin.' : elapsed >= 3 ? 'Okunmuyor mu? Fener aç, 15–20 cm uzaklaş.' : 'Barkodu çerçevenin içine getir'
   const hl = elapsed >= 8
 
+  const lastP = history[0] ? getProduct(history[0].id) : undefined
+  const lastA = lastP ? analyze(lastP, profile, ec) : null
   return (
-    <div className="page">
-      <div className="scanhead">
-        <span className="logo">nar<i>.</i></span>
-        <button className={'torch' + (torch ? ' on' : '')} onClick={flip} disabled={!torchOk} aria-pressed={torch} aria-label="Fener"><ITorch /> Fener</button>
+    <div>
+      <div className="dark">
+        <div className="scanhead">
+          <span className="logo" aria-label="NAR">NAR</span>
+          <button className={'torch' + (torch ? ' on' : '')} onClick={flip} disabled={!torchOk} aria-pressed={torch} aria-label="Fener"><ITorch /> Fener</button>
+        </div>
+        <button className="pchip" onClick={onProfile} aria-label="Profili değiştir">
+          <span><b>{profile.name}</b> için tara · {profileLine(profile)}</span>
+        </button>
+
+        {run || live ? (
+          <div className="videobox"><video ref={vref} playsInline muted aria-label="Kamera görüntüsü" /><div className="frame" />{!live && <div className="ph">Kamera açılıyor…</div>}</div>
+        ) : denied ? (
+          <div className="card" style={{ margin: '12px 0' }}>
+            <strong style={{ color: 'var(--text)' }}>Kamera kapalı</strong>
+            <p className="small muted">Kamera izni verilmedi. Tarayıcı ya da telefon ayarlarından bu site için kamerayı açabilirsin; şimdilik numarayı elle yazabilirsin.</p>
+            <button className="btn sec" onClick={() => { setDenied(false); setRun(true) }}>Tekrar dene</button>
+          </div>
+        ) : !camOk ? (
+          <div className="card" style={{ margin: '12px 0' }}>
+            <strong style={{ color: 'var(--text)' }}>Kamera neden gerekli?</strong>
+            <p className="small muted">Yalnızca barkodu ve etiketi okumak için. Fotoğraflar kaydedilmez.</p>
+            <button className="btn" onClick={() => { setCamOk(true); setRun(true) }}>Kamerayı aç</button>
+          </div>
+        ) : (
+          <div className="card" style={{ margin: '12px 0' }}><button className="btn" onClick={() => setRun(true)}>Kamerayı aç</button></div>
+        )}
+        <p className="hint" aria-live="polite" style={{ textAlign: 'center', minHeight: 40 }}>{live ? <>{elapsed < 3 && <b>{hint}</b>}{elapsed >= 3 && hint}</> : ''}</p>
+        <span className="sr" aria-live="assertive">{said}</span>
       </div>
-      <button className="pchip" onClick={onProfile} aria-label="Profili değiştir">
-        <span><b>{profile.name}</b> için tara · {profileLine(profile)}</span>
-      </button>
 
-      {run || live ? (
-        <div className="videobox"><video ref={vref} playsInline muted aria-label="Kamera görüntüsü" /><div className="frame" />{!live && <div className="ph">Kamera açılıyor…</div>}</div>
-      ) : denied ? (
-        <div className="card" style={{ margin: '10px 0' }}>
-          <strong>Kamera kapalı</strong>
-          <p className="small muted">Kamera izni verilmedi. Tarayıcı ya da telefon ayarlarından bu site için kamerayı açabilirsin; şimdilik numarayı elle yazabilirsin.</p>
-          <button className="btn sec" onClick={() => { setDenied(false); setRun(true) }}>Tekrar dene</button>
-        </div>
-      ) : !camOk ? (
-        <div className="card" style={{ margin: '10px 0' }}>
-          <strong>Kamera neden gerekli?</strong>
-          <p className="small muted">Yalnızca barkodu ve etiketi okumak için. Fotoğraflar kaydedilmez.</p>
-          <button className="btn" onClick={() => { setCamOk(true); setRun(true) }}>Kamerayı aç</button>
-        </div>
-      ) : (
-        <div className="card" style={{ margin: '10px 0' }}><button className="btn" onClick={() => setRun(true)}>Kamerayı aç</button></div>
-      )}
-      <p className="hint" aria-live="polite">{hint}</p>
-      <span className="sr" aria-live="assertive">{said}</span>
+      <div className="page" style={{ paddingTop: 14 }}>
+        {manual ? (
+          <form onSubmit={(e) => { e.preventDefault(); if (!handle(num.replace(/\s/g, ''))) push({ k: 'error', kind: 'barcode' }) }}>
+            <input className="field" autoFocus inputMode="numeric" placeholder="Barkod numarası (örn. 8690624102277)" value={num} onChange={(e) => setNum(e.target.value)} aria-label="Barkod numarası" />
+            <button className="btn" type="submit">Ara</button>
+          </form>
+        ) : (
+          <div className="row2">
+            <button className={'btn line' + (hl ? ' hl' : '')} style={{ background: 'var(--card)' }} onClick={() => setManual(true)}><IKeyboard /> Numarayı elle yaz</button>
+            <button className={'btn line' + (hl ? ' hl' : '')} style={{ background: 'var(--card)' }} onClick={() => push({ k: 'photo' })}><ICamera /> Etiketi fotoğrafla</button>
+          </div>
+        )}
+        <button className="btn line" style={{ marginTop: 10, background: 'var(--card)' }} onClick={() => push({ k: 'search' })}><ISearch /> Ürün ara</button>
 
-      {manual ? (
-        <form onSubmit={(e) => { e.preventDefault(); if (!handle(num.replace(/\s/g, ''))) push({ k: 'error', kind: 'barcode' }) }}>
-          <input className="field" autoFocus inputMode="numeric" placeholder="Barkod numarası (örn. 8690624102277)" value={num} onChange={(e) => setNum(e.target.value)} aria-label="Barkod numarası" />
-          <button className="btn" type="submit">Ara</button>
-        </form>
-      ) : (
-        <div className="row2">
-          <button className={'btn sec' + (hl ? ' hl' : '')} onClick={() => setManual(true)}><IKeyboard /> Numarayı elle yaz</button>
-          <button className={'btn sec' + (hl ? ' hl' : '')} onClick={() => push({ k: 'photo' })}><ICamera /> Etiketi fotoğrafla</button>
-        </div>
-      )}
-      <button className="btn line" style={{ marginTop: 10 }} onClick={() => push({ k: 'search' })}><ISearch /> Ürün ara</button>
+        {lastP && lastA && (
+          <button className="last" onClick={() => push({ k: 'result', id: lastP.id })} style={lastA.level === 'clear' ? undefined : undefined}>
+            <i style={lastA.level === 'clear' ? { background: 'var(--gline)' } : lastA.level === 'unknown' ? { background: '#5A574E' } : undefined} />
+            <span className="t"><small>Son tarama</small><strong>{lastP.name}</strong></span>
+            <Pill level={lastA.level} alert={lastA.alert} />
+          </button>
+        )}
 
-      <button className={'abar' + (online ? '' : ' off')} onClick={onAssistant} aria-label="NAR Asistan: katkı maddeleri hakkında sor">
-        <span className="sp"><ISpark /></span>
-        <span className="tx">{online ? 'Katkı maddeleri hakkında sor' : 'Çevrimdışı: asistan şu an kullanılamıyor.'}</span>
-        <small>NAR veri tabanına dayanır</small>
-      </button>
+        <button className={'abar' + (online ? '' : ' off')} onClick={onAssistant} aria-label="NAR Asistan: katkı maddeleri hakkında sor">
+          <span className="sp"><ISpark /></span>
+          <span className="tx">{online ? 'Katkı maddeleri hakkında sor' : 'Çevrimdışı: asistan şu an kullanılamıyor.'}</span>
+          <small>NAR veri tabanına dayanır</small>
+        </button>
+      </div>
     </div>
   )
 }
