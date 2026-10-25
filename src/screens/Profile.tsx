@@ -40,6 +40,7 @@ export default function Profile() {
         <h2>Gizlilik ve bilgi</h2>
         <button className="btn line" onClick={() => push({ k: 'privacy' })}>Gizlilik ve veriler{health ? '' : ' (sağlık bilgisi rızası)'}</button>
         <button className="btn line" onClick={() => push({ k: 'about' })}>Hakkında ve kaynaklar</button>
+        <p className="buildid">Sürüm: {__BUILD_ID__} UTC</p>
         {!health && <button hidden onClick={grantHealth} />}
       </div>
     </div>
