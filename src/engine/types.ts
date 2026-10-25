@@ -1,4 +1,4 @@
-// Analiz motoru sözleşmesi. AI ekibinin API'siyle aynı şekle oturması hedeflenir (food_ai_300_soru.json'dan türetildi).
+// Profil anahtarları — AI ekibinin sözleşmesiyle (food_ai_300_soru.json) aynı.
 export const ALLERGIES = {
   sut_alerjisi: 'Süt',
   gluten_tahil_alerjisi: 'Gluten / tahıl',
@@ -30,38 +30,4 @@ export type PreferenceKey = keyof typeof PREFERENCES
 export interface Profile {
   allergies: AllergyKey[]
   preferences: PreferenceKey[]
-}
-
-export type Status =
-  | 'contains'
-  | 'may_contain'
-  | 'insufficient_data'
-  | 'criterion_met'
-  | 'not_suitable'
-  | 'uncertain'
-  | 'not_evaluated' // yalnızca demo motor: test setinde bu ürün/kriter için kayıt yok
-
-export interface Product {
-  product_name: string
-  ingredients?: string
-  allergen_statement?: string
-  claims?: string
-  nutrition?: Record<string, unknown>
-  ingredients_complete?: boolean
-  nutrition_facts?: string
-}
-
-export interface CriterionResult {
-  key: string // "allergy:sut_alerjisi" | "preference:glutensiz"
-  status: Status
-  calculationValue?: number | null
-}
-
-export interface AnalysisResult {
-  results: CriterionResult[]
-  source: 'demo' | 'api'
-}
-
-export interface Engine {
-  analyze(input: { productId: string; product: Product; profile: Profile }): Promise<AnalysisResult>
 }

@@ -13,8 +13,8 @@ export default defineConfig({
         short_name: 'NAR',
         description: 'E-kod ve paketli gıda etiketi analizi',
         lang: 'tr',
-        theme_color: '#1a0b0f',
-        background_color: '#1a0b0f',
+        theme_color: '#FAF6EE',
+        background_color: '#FAF6EE',
         display: 'standalone',
         start_url: '/',
         icons: [
