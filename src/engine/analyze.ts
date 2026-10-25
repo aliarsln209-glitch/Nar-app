@@ -1,6 +1,7 @@
 import type { Product } from '../data/catalog'
 import type { ECode } from '../data/ecodes'
-import { SENSITIVITIES, sensMatches, type SensKey } from '../data/sensitivity'
+import { SENSITIVITIES, sensMatches, clip, firstSentence } from '../data/sensitivity'
+import { detectAdditives } from '../data/additives'
 import { ALLERGIES, type AllergyKey, type Profile } from './types'
 import { evaluateProduct, type RuleResult } from './rules'
 
@@ -16,6 +17,7 @@ export interface Analysis {
   labelUsable: boolean
   labelNote: string | null
   codes: string[]
+  additives: { code: string; name: string; tag: string; summary: string; sens: string[] }[]
   counts: { allergy: number; sens: number; ingredients: number }
 }
 
@@ -34,21 +36,20 @@ export function analyze(p: Product, profile: Profile, ecodes: ECode[] | null): A
     profile.allergies
   )
   const rows = results.map((r) => ({ key: r.category_key as AllergyKey, label: ALLERGIES[r.category_key as AllergyKey] ?? r.category_name, result: r }))
-  const codes = usable ? eCodesIn(ing) : []
+  const found = usable && ecodes ? detectAdditives(ing, ecodes) : []
+  const codes = found.map((f) => f.code)
+  const additives: Analysis['additives'] = []
   const warnings: Warn[] = []
   for (const r of rows) {
     const s = r.result.status
     if (s === 'contains' || s === 'may_contain' || s === 'ambiguous') warnings.push({ kind: 'allergy', title: r.label, text: r.result.warning_text })
   }
   let sensCount = 0
-  if (ecodes) {
-    for (const c of codes) {
-      const e = ecodes.find((x) => x.code.toUpperCase() === c)
-      if (!e) continue
-      const hits = sensMatches(e, profile.sensitivities)
-      if (hits.length) { sensCount++; warnings.push({ kind: 'sens', code: c, title: `${c} · ${e.name}`, text: `${hits.map((k) => SENSITIVITIES[k].label).join(', ')} hassasiyetinle ilgili.` }) }
-      else warnings.push({ kind: 'info', code: c, title: `${c} · ${e.name}`, text: e.tags[0] ?? '' })
-    }
+  for (const f of found) {
+    const e = ecodes!.find((x) => x.code === f.code)!
+    const hits = sensMatches(e, profile.sensitivities).map((k) => SENSITIVITIES[k].label)
+    if (hits.length) { sensCount++; warnings.push({ kind: 'sens', code: f.code, title: `${f.code} · ${e.name}`, text: `${hits.join(', ')} hassasiyetinle ilgili.` }) }
+    additives.push({ code: f.code, name: e.name, tag: e.tags[0] ?? '', summary: clip(firstSentence(e.compExp), 120), sens: hits })
   }
   const alertN = warnings.filter((w) => w.kind === 'allergy').length
   const hasAny = profile.allergies.length + profile.sensitivities.length > 0
@@ -62,5 +63,5 @@ export function analyze(p: Product, profile: Profile, ecodes: ECode[] | null): A
   else { level = 'clear'; sub = `${list([...profile.allergies.map((k) => ALLERGIES[k].toLocaleLowerCase('tr') + (k.endsWith('intoleransi') ? '' : '')), ...(profile.sensitivities.length ? [`${profile.sensitivities.length} hassasiyet`] : [])])} için kontrol edildi` }
   const labelNote = usable ? null : p.matchStatus === 'needs_review' ? 'Bu ürünün etiketi inceleniyor; karar için kullanılmadı.' : 'Bu ürün için etiket bilgisi bulunmuyor.'
   const checkedText = [...profile.allergies.map((k) => ALLERGIES[k]), ...profile.sensitivities.map((k) => SENSITIVITIES[k].label)].join(', ')
-  return { level, alert: alertN > 0, sub, rows, warnings, checkedText, labelUsable: usable, labelNote, codes, counts: { allergy: alertN, sens: sensCount, ingredients: ing ? ing.split(/,(?![^()]*\))/).filter((x) => x.trim()).length : 0 } }
+  return { level, alert: alertN > 0, sub, rows, warnings, checkedText, labelUsable: usable, labelNote, codes, additives, counts: { allergy: alertN, sens: sensCount, ingredients: ing ? ing.split(/,(?![^()]*\))/).filter((x) => x.trim()).length : 0 } }
 }

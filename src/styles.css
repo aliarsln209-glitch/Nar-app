@@ -121,3 +121,12 @@ summary{cursor:pointer;font-weight:600;min-height:32px}
 .err h1{font-size:22px;margin:10px 0 4px}
 @media (prefers-reduced-motion:no-preference){.band{animation:in .2s ease-out}@keyframes in{from{opacity:0;transform:translateY(4px)}}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.ing ul{list-style:none;margin:0;padding:0}
+.ing li{padding:9px 0 9px 10px;border-top:1px solid var(--line);border-left:3px solid transparent;font-size:15px}
+.ing li:first-child{border-top:0}
+.ing li.hit{border-left-color:var(--allergy)}
+.ing li small{display:block;color:var(--muted);font-size:13px;margin-top:2px;line-height:1.35}
+.ing em{font-style:normal;margin-left:8px;font-size:11px}
+.prow.add{align-items:flex-start}.prow.add .ebadge{margin:2px 0 0;flex:none}
+.prow.add.sens{background:var(--atint);border-color:var(--amber)}
+.prow.add .t small{display:block;margin-top:2px}

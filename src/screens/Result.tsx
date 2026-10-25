@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { getProduct, type Product } from '../data/catalog'
 import { useECodes } from '../data/useECodes'
 import { analyze } from '../engine/analyze'
+import { parseIngredients } from '../data/additives'
+import { norm } from '../engine/rules'
 import { cleanText, useLocal } from '../lib/storage'
 import { LEGAL, LEVEL, Thumb, TopBar } from '../ui/components'
 import { IInfo, ISaved, ISpark, IShield, ITriangle } from '../ui/Icons'
@@ -30,6 +32,8 @@ export default function Result({ id }: { id: string }) {
   const hasAllergy = a.warnings.some((w) => w.kind === 'allergy')
   const clearRows = a.rows.filter((r) => r.result.status === 'no_declared_allergen_detected')
   const why = a.rows.flatMap((r) => r.result.matched_rules.map((m) => `${r.label}: “${m.matched_term}” (${FIELD[m.source_field] ?? m.source_field})`))
+  const ings = a.labelUsable && p.label ? parseIngredients(p.label.ingredients) : []
+  const terms = a.rows.flatMap((r) => r.result.matched_rules.map((m) => norm(m.matched_term)))
   const thresholds = a.rows.filter((r) => r.result.threshold?.measured_total_so2 != null)
 
   return (
@@ -74,9 +78,6 @@ export default function Result({ id }: { id: string }) {
               <div className="w sens" key={'s' + w.code}><ITriangle /><div><strong>{w.title}</strong>{w.text}</div></div>
             ))}
             {thresholds.map((r) => <p className="small muted" key={r.key}>Toplam SO₂: {r.result.threshold!.measured_total_so2} {r.result.threshold!.unit ?? ''} · yasal eşik: {r.result.threshold!.threshold_status === 'exceeded' ? 'aşıldı' : r.result.threshold!.threshold_status === 'not_exceeded' ? 'aşılmadı' : 'değerlendirilemedi'}</p>)}
-            {a.warnings.filter((w) => w.kind === 'info').map((w) => (
-              <div className="w info" key={'i' + w.code}><button onClick={() => push({ k: 'additive', code: w.code! })}><IInfo /><span><b>{w.title}</b><small>{w.text}</small></span></button></div>
-            ))}
           </>
         )}
         {a.rows.flatMap((r) => r.result.cross_reactivity_notes).map((n) => <p className="small muted" key={n.rule_id}>{n.text}</p>)}
@@ -91,6 +92,24 @@ export default function Result({ id }: { id: string }) {
           {why.length > 0 ? <ul className="small">{why.map((x) => <li key={x}>{x}</li>)}</ul> : <p className="small">Seçtiklerin için etikette eşleşme bulunamadı.</p>}
         </details>
 
+        {a.additives.length > 0 && (
+          <>
+            <h2>Katkı maddeleri ({a.additives.length})</h2>
+            <ul className="list">
+              {a.additives.map((d) => (
+                <li key={d.code}>
+                  <button className={'prow add' + (d.sens.length ? ' sens' : '')} onClick={() => push({ k: 'additive', code: d.code })}>
+                    <span className="ebadge">{d.code}</span>
+                    <span className="t"><strong>{d.name}</strong><small>{d.tag}{d.tag && d.summary ? ' · ' : ''}{d.summary}</small>{d.sens.length > 0 && <small style={{ color: 'var(--aink)', fontWeight: 700 }}>{d.sens.join(', ')} hassasiyetinle ilgili</small>}</span>
+                    <span aria-hidden>›</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="small muted">Dokunarak açıklamaya ve kaynaklara ulaşabilirsin.</p>
+          </>
+        )}
+
         <h2>NAR Asistan</h2>
         <button className="abar" onClick={() => openAssistant(a.codes[0])}>
           <span className="sp"><ISpark /></span><span className="tx">Katkı maddeleri hakkında sor</span><small>NAR veri tabanına dayanır</small>
@@ -98,9 +117,22 @@ export default function Result({ id }: { id: string }) {
 
         {a.labelUsable && p.label && (
           <>
-            <h2>İçindekiler</h2>
-            <div className="card"><p style={{ margin: 0, fontSize: 14 }}>{cleanText(p.label.ingredients)}</p>
-              {p.label.allergenStatement && <p className="small" style={{ marginBottom: 0 }}><b>Alerjen beyanı:</b> {cleanText(p.label.allergenStatement)}</p>}</div>
+            <h2>İçindekiler ({ings.length})</h2>
+            <div className="card ing">
+              <ul>
+                {ings.map((it, i) => {
+                  const t = norm(it.main + ' ' + (it.sub ?? ''))
+                  const hit = terms.some((x) => t.includes(x))
+                  return (
+                    <li key={i} className={hit ? 'hit' : ''}>
+                      <span>{it.main}{hit && <em className="pill alert">alerjenle ilgili</em>}</span>
+                      {it.sub && <small>{it.sub}</small>}
+                    </li>
+                  )
+                })}
+              </ul>
+              {p.label.allergenStatement && <p className="small" style={{ marginBottom: 0 }}><b>Üreticinin alerjen beyanı:</b> {cleanText(p.label.allergenStatement)}</p>}
+            </div>
             {NUT.some(([k]) => (p.label!.nutrition as unknown as Record<string, number | null>)[k] != null) && (
               <details><summary>Besin değerleri (100 g/ml)</summary>
                 <table className="ntable"><tbody>{NUT.filter(([k]) => (p.label!.nutrition as unknown as Record<string, number | null>)[k] != null).map(([k, l, u]) => <tr key={k}><td>{l}</td><td>{(p.label!.nutrition as unknown as Record<string, number | null>)[k]} {u}</td></tr>)}</tbody></table>
