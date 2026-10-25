@@ -34,7 +34,7 @@ export default function ProductsScreen({ profile, favorites, onToggleFav }: Prop
           {(() => {
             const b = barcodes.find((x) => x.ean === q.trim())
             return b
-              ? `Barkod kayıtlı: ${b.name}. Bu barkod için etiket (içindekiler) verisi henüz bağlı değil.`
+              ? `Barkod kayıtlı: ${b.name}${b.size ? ' (' + b.size + ')' : ''}. Bu barkod için etiket (içindekiler) verisi henüz bağlı değil.${b.eanValid ? '' : ' Dikkat: barkodun kontrol hanesi tutmuyor, doğrulanmalı.'}`
               : 'Bu barkod kayıtlı değil.'
           })()}
         </div>
