@@ -1,113 +1,127 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getProduct, type Product } from '../data/catalog'
+import { useECodes } from '../data/useECodes'
 import { analyze } from '../engine/analyze'
-import type { RuleStatus } from '../engine'
-import { cleanText } from '../lib/storage'
-import { LEVEL_TEXT, Thumb, TopBar } from '../ui/components'
-import { ISaved } from '../ui/Icons'
+import { cleanText, useLocal } from '../lib/storage'
+import { LEGAL, LEVEL, Thumb, TopBar } from '../ui/components'
+import { IInfo, ISaved, ISpark, IShield, ITriangle } from '../ui/Icons'
 import { useApp } from '../ui/ctx'
+import { profileLine } from '../ui/ProfileSwitcher'
 
-const ROW: Record<RuleStatus, { t: string; cls: string }> = {
-  contains: { t: 'İçeriyor', cls: 'danger' },
-  may_contain: { t: 'İçerebilir', cls: 'caution' },
-  ambiguous: { t: 'Belirsiz', cls: 'caution' },
-  insufficient_data: { t: 'Bilgi yetersiz', cls: 'unknown' },
-  no_declared_allergen_detected: { t: 'Etikette yok', cls: 'clear' }
-}
-const NLAB: [keyof NonNullable<Product['label']>['nutrition'], string, string][] = [
-  ['kcal', 'Enerji', 'kcal'], ['fat', 'Yağ', 'g'], ['satFat', 'Doymuş yağ', 'g'], ['carb', 'Karbonhidrat', 'g'],
-  ['sugar', 'Şeker', 'g'], ['fiber', 'Lif', 'g'], ['protein', 'Protein', 'g'], ['salt', 'Tuz', 'g']
-]
-
-export function eCodesIn(text: string): string[] {
-  const out = new Set<string>()
-  for (const m of text.matchAll(/(^|[^A-Za-z0-9])E[\s-]?(\d{3,4}[a-z]?)(?![A-Za-z0-9])/gi)) out.add('E' + m[2].toUpperCase())
-  return [...out]
-}
+const NUT: [string, string, string][] = [['kcal', 'Enerji', 'kcal'], ['fat', 'Yağ', 'g'], ['satFat', 'Doymuş yağ', 'g'], ['carb', 'Karbonhidrat', 'g'], ['sugar', 'Şeker', 'g'], ['fiber', 'Lif', 'g'], ['protein', 'Protein', 'g'], ['salt', 'Tuz', 'g']]
+const FIELD: Record<string, string> = { ingredients: 'içindekiler', allergen_statement: 'alerjen beyanı', product_name: 'ürün adı', claims: 'ürün üzerindeki beyan' }
+const DATA_DATE = '25 Ekim 2026'
 
 export default function Result({ id }: { id: string }) {
-  const { profile, addHistory, saved, toggleSaved, push, goTab } = useApp()
-  const p = getProduct(id)
-  const a = useMemo(() => (p ? analyze(p, profile) : null), [p, profile])
-  const [ask, setAsk] = useState(false)
-  useEffect(() => { if (p) addHistory(p.id) /* eslint-disable-next-line */ }, [id])
+  const { profiles, profile, addHistory, saved, toggleSaved, push, goTab, temp, flagged, openAssistant, openProfiles, report } = useApp()
+  const p: Product | undefined = id === 'photo' ? temp ?? undefined : getProduct(id)
+  const ecodes = useECodes()
+  const a = useMemo(() => (p ? analyze(p, profile, ecodes) : null), [p, profile, ecodes])
+  const head = useRef<HTMLHeadingElement>(null)
+  const [wrong, setWrong] = useState(false)
+  const [dismissed, setDismissed] = useLocal<boolean>('nar.promptDismissed', false)
+  useEffect(() => { if (p && id !== 'photo') addHistory(p.id) /* eslint-disable-next-line */ }, [id])
+  useEffect(() => { head.current?.focus() }, [id, a?.level])
   if (!p || !a) return <div className="page"><TopBar title="Ürün" /><p className="empty">Ürün bulunamadı.</p></div>
-  const L = LEVEL_TEXT[a.level]
+  if (profile.sensitivities.length && !ecodes) return <div className="page"><TopBar title="Sonuç" /><p className="empty">Hesaplanıyor…</p></div>
+  const L = LEVEL[a.level]
+  const Icon = L.icon
   const isSaved = saved.includes(p.id)
-  const ecodes = a.labelUsable ? eCodesIn(p.label!.ingredients) : []
-  const conflicts = a.rows.filter((r) => r.result.data_conflict)
+  const hasAllergy = a.warnings.some((w) => w.kind === 'allergy')
+  const clearRows = a.rows.filter((r) => r.result.status === 'no_declared_allergen_detected')
+  const why = a.rows.flatMap((r) => r.result.matched_rules.map((m) => `${r.label}: “${m.matched_term}” (${FIELD[m.source_field] ?? m.source_field})`))
+  const thresholds = a.rows.filter((r) => r.result.threshold?.measured_total_so2 != null)
 
   return (
     <div>
-      <TopBar title="Sonuç" right={<button className="iconbtn" onClick={() => toggleSaved(p.id)} aria-label={isSaved ? 'Kaydedilenlerden çıkar' : 'Kaydet'} style={{ color: isSaved ? 'var(--green)' : undefined }}><ISaved fill={isSaved} /></button>} />
-      <div className="page" style={{ paddingTop: 4 }}>
+      <TopBar title="Sonuç" right={id !== 'photo' ? <button className="iconbtn" onClick={() => toggleSaved(p.id)} aria-label={isSaved ? 'Kaydedilenlerden çıkar' : 'Kaydet'} style={{ color: isSaved ? 'var(--green)' : undefined }}><ISaved fill={isSaved} /></button> : undefined} />
+      <div className="page" style={{ paddingTop: 4, paddingBottom: 150 }}>
         <div className="hero">
-          <Thumb p={p} big />
-          <div><h1 className="big" style={{ fontSize: 20, margin: 0 }}>{p.name}</h1><span className="muted small">{p.size ?? ''}{p.ean ? ` · ${p.ean}` : ''}</span></div>
+          <Thumb p={p} />
+          <div>
+            <h1 className="big" style={{ fontSize: 20, margin: 0 }}>{p.name}</h1>
+            <span className="muted small">{p.size ?? ''}{p.ean ? ` · ${p.ean}` : ''}</span>
+            {flagged[p.id] && <div className="small" style={{ color: 'var(--aink)' }}>Doğrulanıyor</div>}
+          </div>
         </div>
 
-        <div className={'verdict ' + a.level} role="status">
-          <h2>{L.title}</h2>
-          <p style={{ margin: 0, fontSize: 14 }}>{L.sub}</p>
-        </div>
-        {a.labelNote && <p className="note">{a.labelNote}</p>}
-
-        {a.rows.length > 0 && (
-          <div className="card" style={{ marginTop: 10 }}>
-            {a.rows.map((r) => {
-              const s = ROW[r.result.status]
-              return (
-                <div className="arow" key={r.key}>
-                  <div>
-                    <strong>{r.label}</strong>
-                    <div className="why">{r.result.warning_text}</div>
-                    {r.result.conflict_note && <div className="why" style={{ color: 'var(--aink)' }}>{r.result.conflict_note}</div>}
-                    {r.result.threshold && r.result.threshold.measured_total_so2 != null && <div className="why">Toplam SO₂: {r.result.threshold.measured_total_so2} {r.result.threshold.unit ?? ''} · eşik: {r.result.threshold.threshold_status === 'exceeded' ? 'aşıldı' : r.result.threshold.threshold_status === 'not_exceeded' ? 'aşılmadı' : 'değerlendirilemedi'}</div>}
-                    {r.result.cross_reactivity_notes.map((n) => <div className="why" key={n.rule_id}>{n.text}</div>)}
-                  </div>
-                  <span className={'pill ' + s.cls}>{s.t}</span>
-                </div>
-              )
-            })}
+        {profiles.length === 0 && !dismissed && (
+          <div className="card" style={{ marginTop: 12 }}>
+            <strong>Sonuçları sana göre kişiselleştirmek ister misin? (30 sn)</strong>
+            <div className="row2" style={{ marginTop: 8 }}><button className="btn" onClick={() => goTab('profile')}>Başla</button><button className="btn sec" onClick={() => setDismissed(true)}>Şimdi değil</button></div>
           </div>
         )}
-        {profile.preferences.length > 0 && <p className="note" style={{ marginTop: 10 }}>Tercihlerin ({profile.preferences.length}) için değerlendirme henüz yok; yalnızca alerjiler hesaplanıyor.</p>}
-        {conflicts.length > 0 && <p className="note">Etikette birbiriyle çelişen beyanlar var; daha ihtiyatlı sonuç gösterildi.</p>}
+        <button className="pchip" style={{ marginTop: 12 }} onClick={openProfiles} aria-label="Profili değiştir"><span><b>{profile.name}</b> için · {profileLine(profile)}</span></button>
 
-        {ecodes.length > 0 && (
+        <div className={'band ' + a.level} role="status">
+          <Icon />
+          <div>
+            <h2 tabIndex={-1} ref={head} style={{ outline: 'none' }}>{L.title}</h2>
+            <p>{a.sub}</p>
+            {a.level === 'clear' && <p className="small" style={{ marginTop: 6 }}>Ambalajdaki içindekiler listesini ve alerjen uyarısını yine de oku.</p>}
+            {a.level === 'unknown' && a.labelNote && <p className="small">{a.labelNote} “Alerjen yok” denemez.</p>}
+          </div>
+        </div>
+        {hasAllergy && <p className="small" style={{ margin: '0 0 6px' }}>Alerji durumunda hekimine danış.</p>}
+
+        {(a.warnings.length > 0 || thresholds.length > 0) && (
           <>
-            <h2>Katkı maddeleri</h2>
-            <div className="chips">{ecodes.map((c) => <button key={c} className="ecode" onClick={() => push({ k: 'additive', code: c })}>{c}</button>)}</div>
+            <h2>Uyarılar</h2>
+            {a.warnings.filter((w) => w.kind === 'allergy').map((w) => (
+              <div className="w allergy" key={'a' + w.title}><IShield /><div><strong>{w.title}</strong>{w.text}</div></div>
+            ))}
+            {a.warnings.filter((w) => w.kind === 'sens').map((w) => (
+              <div className="w sens" key={'s' + w.code}><ITriangle /><div><strong>{w.title}</strong>{w.text}</div></div>
+            ))}
+            {thresholds.map((r) => <p className="small muted" key={r.key}>Toplam SO₂: {r.result.threshold!.measured_total_so2} {r.result.threshold!.unit ?? ''} · yasal eşik: {r.result.threshold!.threshold_status === 'exceeded' ? 'aşıldı' : r.result.threshold!.threshold_status === 'not_exceeded' ? 'aşılmadı' : 'değerlendirilemedi'}</p>)}
+            {a.warnings.filter((w) => w.kind === 'info').map((w) => (
+              <div className="w info" key={'i' + w.code}><button onClick={() => push({ k: 'additive', code: w.code! })}><IInfo /><span><b>{w.title}</b><small>{w.text}</small></span></button></div>
+            ))}
           </>
         )}
+        {a.rows.flatMap((r) => r.result.cross_reactivity_notes).map((n) => <p className="small muted" key={n.rule_id}>{n.text}</p>)}
+        {a.rows.some((r) => r.result.data_conflict) && <p className="note">Etikette birbiriyle çelişen beyanlar var; daha ihtiyatlı sonuç gösterildi.</p>}
+        {clearRows.length > 0 && a.level !== 'unknown' && <p className="small muted">Etikette bulunmadı: {clearRows.map((r) => r.label).join(', ')}.</p>}
+        {profile.preferences.length > 0 && <p className="small muted">Tercihler ({profile.preferences.length}) için değerlendirme henüz yok.</p>}
+
+        <details>
+          <summary>Neden bu sonucu gördün?</summary>
+          <p className="small">Karar, etiket verisini profilindeki seçimlerle kural setine göre karşılaştırır; asistan karar vermez.</p>
+          <p className="small"><b>Kontrol edilenler:</b> {a.checkedText || '—'}</p>
+          {why.length > 0 ? <ul className="small">{why.map((x) => <li key={x}>{x}</li>)}</ul> : <p className="small">Seçtiklerin için etikette eşleşme bulunamadı.</p>}
+        </details>
 
         <h2>NAR Asistan</h2>
-        <div className="card">
-          <p className="small muted" style={{ marginTop: 0 }}>Bu sonucu açıklamak için hazırlanan yardımcı. Henüz devrede değil; yanıtlar etiket verisine ve kaynaklara dayanacak. Tıbbi sorular için doktoruna danış.</p>
-          <div className="chips">
-            {['Neden bu sonuç?', 'Hangi içerik sorun?', 'Alternatif öner'].map((c) => <button key={c} className="chip" disabled onClick={() => setAsk(!ask)}>{c}</button>)}
-          </div>
-        </div>
+        <button className="abar" onClick={() => openAssistant(a.codes[0])}>
+          <span className="sp"><ISpark /></span><span className="tx">Katkı maddeleri hakkında sor</span><small>NAR veri tabanına dayanır</small>
+        </button>
 
         {a.labelUsable && p.label && (
           <>
-            <h2>Etiket bilgisi</h2>
-            <dl className="facts card" style={{ margin: 0 }}>
-              <dt style={{ marginTop: 0 }}>İçindekiler</dt><dd>{cleanText(p.label.ingredients)}</dd>
-              <dt>Alerjen beyanı</dt><dd>{cleanText(p.label.allergenStatement) || '—'}</dd>
-            </dl>
-            <details>
-              <summary>Besin değerleri (100 g/ml)</summary>
-              <table className="ntable"><tbody>
-                {NLAB.filter(([k]) => p.label!.nutrition[k] != null).map(([k, l, u]) => <tr key={k}><td>{l}</td><td>{p.label!.nutrition[k]} {u}</td></tr>)}
-              </tbody></table>
-            </details>
-            <p className="small muted">Kaynak: {p.label.source}. Bu veri üretici etiketinden derlenmiştir; satın almadan önce ambalajı kontrol et.</p>
+            <h2>İçindekiler</h2>
+            <div className="card"><p style={{ margin: 0, fontSize: 14 }}>{cleanText(p.label.ingredients)}</p>
+              {p.label.allergenStatement && <p className="small" style={{ marginBottom: 0 }}><b>Alerjen beyanı:</b> {cleanText(p.label.allergenStatement)}</p>}</div>
+            {NUT.some(([k]) => (p.label!.nutrition as unknown as Record<string, number | null>)[k] != null) && (
+              <details><summary>Besin değerleri (100 g/ml)</summary>
+                <table className="ntable"><tbody>{NUT.filter(([k]) => (p.label!.nutrition as unknown as Record<string, number | null>)[k] != null).map(([k, l, u]) => <tr key={k}><td>{l}</td><td>{(p.label!.nutrition as unknown as Record<string, number | null>)[k]} {u}</td></tr>)}</tbody></table>
+              </details>
+            )}
+            <p className="small muted">Kaynak: {p.label.source}{id !== 'photo' ? ` · Veri tarihi: ${DATA_DATE}` : ''}.</p>
           </>
         )}
-        <button className="btn line" style={{ marginTop: 14 }} onClick={() => goTab('compare')}>Karşılaştır sekmesine git</button>
-        <p className="small muted" style={{ marginTop: 14 }}>NAR bilgilendirme amaçlıdır; tıbbi tavsiye değildir. “Çakışma yok” sonucu alerjenin kesin olmadığı anlamına gelmez.</p>
+        {id !== 'photo' && <button className="chip" style={{ marginTop: 8 }} onClick={() => setWrong(true)}>Bu ürün yanlış mı?</button>}
+        {wrong && (
+          <div className="card" style={{ marginTop: 8 }}>
+            <strong>Bu ürün yanlış mı?</strong>
+            <div className="row2" style={{ marginTop: 8 }}>
+              <button className="btn sec" onClick={() => push({ k: 'search', pick: 'fix', fixId: p.id })}>Doğru ürünü seç</button>
+              <button className="btn sec" onClick={() => { report('wrong', { id: p.id }); setWrong(false) }}>Bildir</button>
+            </div>
+          </div>
+        )}
+        <p className="small muted" style={{ marginTop: 14 }}>{LEGAL}</p>
       </div>
+      <div className="sticky"><button className="btn" onClick={() => goTab('scan')}>Yeni tara</button></div>
     </div>
   )
 }

@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react'
-import { loadECodes, type ECode } from '../data/ecodes'
+import { useECodes } from '../data/useECodes'
+import { clip, firstSentence, sourceBadge } from '../data/sensitivity'
 import { TopBar } from '../ui/components'
-
-const safeUrl = (u: string) => (/^https?:\/\//i.test(u) ? u : '')
+import { ISpark } from '../ui/Icons'
+import { useApp } from '../ui/ctx'
 
 export default function Additive({ code }: { code: string }) {
-  const [all, setAll] = useState<ECode[] | null>(null)
-  useEffect(() => { loadECodes().then(setAll) }, [])
+  const all = useECodes()
+  const { openAssistant } = useApp()
   const e = all?.find((x) => x.code.toUpperCase() === code.toUpperCase())
+  const badges = e ? [...new Map(e.sources.map(sourceBadge).filter(Boolean).map((b) => [b!.label, b!])).values()] : []
+  const who = e?.notSuitable ? firstSentence(e.notSuitable) : ''
+  const rest = e?.notSuitable ? e.notSuitable.slice(who.length).trim() : ''
   return (
     <div>
       <TopBar title="Katkı maddesi" />
@@ -16,19 +19,17 @@ export default function Additive({ code }: { code: string }) {
         {all && !e && <p className="empty">{code} için sözlükte kayıt yok.</p>}
         {e && (
           <>
-            <h1 className="big">{e.code} · {e.name}</h1>
-            <div className="chips">{e.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
-            <h2>Nedir?</h2><p>{e.compExp}</p>
-            <h2>Riskler</h2><p>{e.riskHalk}</p>
-            <h2>Kimler dikkat etmeli?</h2><p>{e.notSuitable || 'Bu E-kod için belirtilmiş bir kısıt yok.'}</p>
-            <h2>Kabul edilebilir günlük alım</h2><p>{e.riskValue}</p>
-            <details><summary>Bilimsel ayrıntı</summary><p>{e.academicExp}</p><p className="muted">{e.riskBilimsel}</p></details>
-            {e.sources.length > 0 && (
-              <details><summary>Kaynaklar ({e.sources.length})</summary>
-                <ul className="src">{e.sources.map((u) => safeUrl(u) && <li key={u}><a href={safeUrl(u)} target="_blank" rel="noopener noreferrer">{u}</a></li>)}</ul>
-              </details>
-            )}
-            <p className="note">Bilgilendirme amaçlıdır; tıbbi tavsiye değildir.</p>
+            <h1 className="big"><span className="ebadge">{e.code}</span>{e.name}</h1>
+            {e.tags[0] && <p className="tag" style={{ marginTop: 0 }}>{e.tags.join(' · ')}</p>}
+            <p style={{ fontSize: 17 }}>{clip(firstSentence(e.compExp), 140)}</p>
+
+            {e.riskValue && (<><h2>Güvenli alım değeri</h2><p style={{ marginBottom: 2 }}>{e.riskValue}</p><p className="small muted" style={{ marginTop: 0 }}>Bu değer bilimsel bir referanstır; üründeki miktarı göstermez.</p></>)}
+            {who && (<><h2>Kimler dikkat etmeli?</h2><p>{who}</p>{rest && <details><summary>Devamı</summary><p>{rest}</p></details>}<p className="small muted">Sağlık durumun varsa hekimine danış.</p></>)}
+            {e.riskHalk && <><h2>Riskler</h2><p>{e.riskHalk}</p></>}
+            {(e.academicExp || e.riskBilimsel) && <details><summary>Bilimsel açıklama</summary>{e.academicExp && <p>{e.academicExp}</p>}{e.riskBilimsel && <p className="muted">{e.riskBilimsel}</p>}</details>}
+            {badges.length > 0 && (<><h2>Kaynaklar</h2><div>{badges.slice(0, 12).map((b) => <a key={b.label} className="src" href={b.url} target="_blank" rel="noopener noreferrer">[{b.label}]</a>)}</div></>)}
+            <button className="abar" onClick={() => openAssistant(e.code)}><span className="sp"><ISpark /></span><span className="tx">Bu madde hakkında sor</span><small>NAR veri tabanına dayanır</small></button>
+            <p className="small muted" style={{ marginTop: 14 }}>NAR bilgilendirme amaçlıdır; tıbbi tavsiye değildir.</p>
           </>
         )}
       </div>

@@ -28,6 +28,10 @@ export type AllergyKey = keyof typeof ALLERGIES
 export type PreferenceKey = keyof typeof PREFERENCES
 
 export interface Profile {
+  id: string
+  name: string
+  child?: boolean // çocuk profili: veli hesabı altında, yalnızca cihazda
   allergies: AllergyKey[]
+  sensitivities: import('../data/sensitivity').SensKey[]
   preferences: PreferenceKey[]
 }

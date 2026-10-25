@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  define: { __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)) },
   plugins: [
     react(),
     VitePWA({
@@ -23,7 +24,7 @@ export default defineConfig({
           { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
         ]
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,png,svg,json}'], maximumFileSizeToCacheInBytes: 3_000_000 }
+      workbox: { globPatterns: ['**/*.{js,css,html,png,svg,json}'], maximumFileSizeToCacheInBytes: 3_000_000, runtimeCaching: [{ urlPattern: /\/img\/p\/.*\.webp$/, handler: 'CacheFirst', options: { cacheName: 'urun-gorselleri', expiration: { maxEntries: 300 } } }] }
     })
   ]
 })
