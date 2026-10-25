@@ -91,7 +91,7 @@ export default function App() {
   const top = stack[stack.length - 1]
   return (
     <AppCtx.Provider value={ctx}>
-      <div className="shell">
+      <div className={'shell' + (tab === 'scan' && !top ? ' scanmode' : '')}>
         {top ? (
           <>
             {top.k === 'result' && <Result key={top.id + profile.id} id={top.id} />}
