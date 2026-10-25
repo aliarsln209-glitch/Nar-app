@@ -13,7 +13,7 @@ npm run build
 - `src/engine/types.ts` – analiz motoru sözleşmesi (AI ekibinin API'siyle hizalanacak).
 - `src/engine/mock.ts` – DEMO motor: `food_ai_300_soru.json` test setindeki elle yazılmış beklenen sonuçları döndürür. Gerçek analiz değildir.
 - `src/engine/index.ts` – gerçek API hazır olunca buradan değişecek.
-- `src/data/demoCases.json` – test setinin kısaltılmış hali. `src/data/ecodes.ts` – E-kod verisi için yer tutucu.
+- `src/data/demoCases.json` – test setinin kısaltılmış hali. `src/data/ecodes.json` – 272 E-kod (ANA_TABLO_CS_EKIBI_v15.xlsx → `scripts/xlsx_to_ecodes.py`). `src/data/barcodes.json` – ad↔EAN eşleşmeleri (etiket verisi yok).
 - Profil/favoriler yalnızca `localStorage` (KVKK: sağlık verisi sunucuya gitmez).
 - Kazınmış metinler `cleanText` ile temizlenir, HTML olarak render edilmez.
 
@@ -21,4 +21,4 @@ npm run build
 Workers & Pages → Create application → GitHub repo → Build command: `npm run build`, çıktı: `dist` (`wrangler.jsonc` SPA yönlendirmesini ayarlar).
 
 ## Eksikler
-Barkod, OCR, RAG asistanı, hesaplar, gerçek E-kod verisi, yüksek çözünürlüklü logo (mevcut 143×139 px; ikonlar büyütülmüş).
+Barkod, OCR, RAG asistanı, hesaplar, yüksek çözünürlüklü logo (mevcut 143×139 px; ikonlar büyütülmüş).

@@ -3,6 +3,7 @@ import { demoProducts, type DemoProduct } from '../engine/mock'
 import { cleanText } from '../lib/storage'
 import type { Profile } from '../engine'
 import ResultView from './ResultView'
+import barcodes from '../data/barcodes.json'
 
 interface Props {
   profile: Profile
@@ -27,7 +28,17 @@ export default function ProductsScreen({ profile, favorites, onToggleFav }: Prop
   return (
     <section className="page">
       <h1>Ürünler</h1>
-      <input className="search" placeholder="Ürün ara…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="search" placeholder="Ürün adı veya barkod ara…" value={q} onChange={(e) => setQ(e.target.value)} />
+      {/^\d{8,14}$/.test(q.trim()) && (
+        <div className="note">
+          {(() => {
+            const b = barcodes.find((x) => x.ean === q.trim())
+            return b
+              ? `Barkod kayıtlı: ${b.name}. Bu barkod için etiket (içindekiler) verisi henüz bağlı değil.`
+              : 'Bu barkod kayıtlı değil.'
+          })()}
+        </div>
+      )}
       <ul className="list">
         {list.map((p) => (
           <li key={p.id}>
